@@ -100,6 +100,8 @@ float TOTAL_PLEDGED = 183.39;
 int[] CREATURES_PER_PATRON = new int[PATRON_COUNT];
 float startingFoodDistance = 0;
 
+int THREAD_COUNT = 15;
+
 float inter(int a, int b, float offset) {
   return float(a)+(float(b)-float(a))*offset;
 }
@@ -1076,13 +1078,45 @@ void draw() {
     setMenu(5);
     if (!stepbystepslow) {
       long start = System.nanoTime();
+      final Creature[] workingCopy = new Creature[1000];
       for (int i = 0; i < 1000; i++) {
-        setGlobalVariables(c[i]);
-        for (int s = 0; s < 900; s++) {
-          simulateCurrentCreature();
+        workingCopy[i] = c[i].copyCreature(-1,false,true);
+        workingCopy[i].calculateNextFoodLocation();
+      }
+      Thread[] threads = new Thread[THREAD_COUNT];
+      int previousLastIndex = 0;
+      for(int i = 0; i < threads.length; i++) {
+        int firstIndex = previousLastIndex;
+        int lastIndex;
+        if(i == threads.length - 1) {
+          lastIndex = 1000;
+        } else {
+          lastIndex = firstIndex + (int)(1000f / threads.length);
         }
-        currentCreature.setAverages();
-        setFitness(i);
+        final int a = firstIndex;
+        final int b = lastIndex;
+        final Creature[] fc = c;
+        threads[i] = new Thread() {
+          @Override
+          public void run() {
+            for(int j = a; j < b; j++) {
+              for (int s = 0; s < 900; s++) {
+                workingCopy[j].simulate();
+              }
+              workingCopy[j].setAverages();
+              fc[j].d = workingCopy[j].getFitness();
+            }
+          }
+        };
+        threads[i].start();
+        previousLastIndex = lastIndex;
+      }
+      for(int i = 0; i < threads.length; i++) {
+        try {
+          threads[i].join();
+        } catch (InterruptedException ie) {
+          // :(
+        }
       }
       double simulationTime = Math.round((System.nanoTime() - start) / 100000D) / 10;
       frame.setTitle("evolutionSteer | simulationTime: " + simulationTime + " ms");
