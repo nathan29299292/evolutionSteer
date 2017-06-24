@@ -78,11 +78,9 @@ int[] creaturesInPosition = new int[1000];
 float camZoom = 0.015;
 float gravity = 0.006;//0.007;
 float airFriction = 0.95;
-float MIN_FOOD_DISTANCE = 1;
-float MAX_FOOD_DISTANCE = 2.5;
+float MIN_FOOD_DISTANCE = 1.2;
+float MAX_FOOD_DISTANCE = 1.5;
 
-float target;
-float force;
 int speed;
 boolean stepbystep;
 boolean stepbystepslow;
@@ -100,7 +98,7 @@ float TOTAL_PLEDGED = 183.39;
 int[] CREATURES_PER_PATRON = new int[PATRON_COUNT];
 float startingFoodDistance = 0;
 
-int THREAD_COUNT = 15;
+int THREAD_COUNT = 14;
 
 float inter(int a, int b, float offset) {
   return float(a)+(float(b)-float(a))*offset;
@@ -1091,7 +1089,7 @@ void draw() {
         if(i == threads.length - 1) {
           lastIndex = 1000;
         } else {
-          lastIndex = firstIndex + (int)(1000f / threads.length);
+          lastIndex = (int)(i * 1000f / threads.length);
         }
         final int a = firstIndex;
         final int b = lastIndex;
@@ -1115,7 +1113,7 @@ void draw() {
         try {
           threads[i].join();
         } catch (InterruptedException ie) {
-          // :(
+          ie.printStackTrace(); // :(
         }
       }
       double simulationTime = Math.round((System.nanoTime() - start) / 100000D) / 10;
