@@ -27,11 +27,6 @@ float cumulativeAngularVelocity = 0;
 boolean saveFramesPerGeneration = true;
 color gridBGColor = color(220, 253, 102, 255);
 float foodAngleChange = 0.0;
-float foodX = 0;
-float foodY = 0;
-float foodZ = 0;
-float foodAngle = 0;
-int chomps = 0;
 
 int lastImageSaved = -1;
 float pressureUnit = 500.0/2.37;
@@ -83,14 +78,9 @@ int[] creaturesInPosition = new int[1000];
 float camZoom = 0.015;
 float gravity = 0.006;//0.007;
 float airFriction = 0.95;
-float MIN_FOOD_DISTANCE = 1;
-float MAX_FOOD_DISTANCE = 2.5;
+float MIN_FOOD_DISTANCE = 1.2;
+float MAX_FOOD_DISTANCE = 1.5;
 
-float target;
-float force;
-float averageX;
-float averageY;
-float averageZ;
 int speed;
 boolean stepbystep;
 boolean stepbystepslow;
@@ -108,6 +98,8 @@ float TOTAL_PLEDGED = 183.39;
 int[] CREATURES_PER_PATRON = new int[PATRON_COUNT];
 float startingFoodDistance = 0;
 
+int THREAD_COUNT = 14;
+
 float inter(int a, int b, float offset) {
   return float(a)+(float(b)-float(a))*offset;
 }
@@ -118,6 +110,14 @@ int rInt() {
   return int(random(-0.01, 1.01));
 }
 void drawGround(PGraphics img) {
+  float averageX = 0;
+  float averageY = 0;
+  float averageZ = 0;
+  if(currentCreature != null) {
+    averageX = currentCreature.averageX;
+    averageY = currentCreature.averageY;
+    averageZ = currentCreature.averageZ;
+  }
   int stairDrawStart = max(1,(int)(-averageY/hazelStairs)-10);
   img.noStroke();
   if (haveGround){
@@ -157,6 +157,22 @@ float toMuscleUsable(float f){
   return min(max(f,0.8),1.2);
 }
 void drawPosts(PGraphics img) {
+  float averageX = 0;
+  float averageY = 0;
+  float averageZ = 0;
+  if(currentCreature != null) {
+    averageX = currentCreature.averageX;
+    averageY = currentCreature.averageY;
+    averageZ = currentCreature.averageZ;
+  }
+  float foodX = 0;
+  float foodY = 0;
+  float foodZ = 0;
+  if(currentCreature != null) {
+    foodX = currentCreature.foodX;
+    foodY = currentCreature.foodY;
+    foodZ = currentCreature.foodZ;
+  }
   int startPostY = min(-8,(int)(averageY/4)*4-4);
   img.noStroke();
   img.textAlign(CENTER);
@@ -224,7 +240,7 @@ void drawArrow(float x, float y, float z, PGraphics img) {
   img.vertex(-0.5*scaleToFixBug, -2.7*scaleToFixBug);
   img.vertex(0.5*scaleToFixBug, -2.7*scaleToFixBug);
   img.endShape(CLOSE);
-  String fitnessString = nf(getFitness(),0,2)+" "+fitnessUnit;
+  String fitnessString = nf(currentCreature.getFitness(),0,2)+" "+fitnessUnit;
   img.fill(255);
   img.text(fitnessString, 0, -2.91*scaleToFixBug,0.1*scaleToFixBug);
   img.popMatrix();
@@ -441,20 +457,6 @@ void adjustToCenter(int nodeNum) {
     ni.y -= lowY;
   }
 }
-void setAverages() {
-  averageX = 0;
-  averageY = 0;
-  averageZ = 0;
-  for (int i = 0; i < currentCreature.n.size(); i++) {
-    Node ni = currentCreature.n.get(i);
-    averageX += ni.x;
-    averageY += ni.y;
-    averageZ += ni.z;
-  }
-  averageX = averageX/currentCreature.n.size();
-  averageY = averageY/currentCreature.n.size();
-  averageZ = averageZ/currentCreature.n.size();
-}
 Creature[] c = new Creature[1000];
 ArrayList<Creature> c2 = new ArrayList<Creature>();
 
@@ -582,7 +584,7 @@ void mouseReleased() {
         for (int s = 0; s < 900; s++) {
           simulateCurrentCreature();
         }
-        setAverages();
+        currentCreature.setAverages();
         setFitness(i);
       }
       setMenu(6);
@@ -687,7 +689,7 @@ void drawScreenImage(int stage) {
   screenImage.endDraw();
 }
 void drawpopUpImage() {
-  setAverages();
+  currentCreature.setAverages();
   moveCamera();
   popUpImage.beginDraw();
   popUpImage.smooth();
@@ -709,12 +711,20 @@ void drawpopUpImage() {
   drawPosts(popUpImage);
   drawGround(popUpImage);
   currentCreature.drawCreature(popUpImage,false);
-  drawArrow(averageX,averageY,averageZ,popUpImage);
+  drawArrow(currentCreature.averageX,currentCreature.averageY,currentCreature.averageZ,popUpImage);
   popUpImage.noStroke();
   popUpImage.endDraw();
   popUpImage.popMatrix();
 }
 void moveCamera(){
+  float averageX = 0;
+  float averageY = 0;
+  float averageZ = 0;
+  if(currentCreature != null) {
+    averageX = currentCreature.averageX;
+    averageY = currentCreature.averageY;
+    averageZ = currentCreature.averageZ;
+  }
   camX += (averageX-camX)*0.2;
   camY += (averageY-camY)*0.2;
   camZ += (averageZ-camZ)*0.2;
@@ -1065,14 +1075,49 @@ void draw() {
     setGlobalVariables(c[creaturesTested]);
     setMenu(5);
     if (!stepbystepslow) {
+      long start = System.nanoTime();
+      final Creature[] workingCopy = new Creature[1000];
       for (int i = 0; i < 1000; i++) {
-        setGlobalVariables(c[i]);
-        for (int s = 0; s < 900; s++) {
-          simulateCurrentCreature();
-        }
-        setAverages();
-        setFitness(i);
+        workingCopy[i] = c[i].copyCreature(-1,false,true);
+        workingCopy[i].calculateNextFoodLocation();
       }
+      Thread[] threads = new Thread[THREAD_COUNT];
+      int previousLastIndex = 0;
+      for(int i = 0; i < threads.length; i++) {
+        int firstIndex = previousLastIndex;
+        int lastIndex;
+        if(i == threads.length - 1) {
+          lastIndex = 1000;
+        } else {
+          lastIndex = (int)(i * 1000f / threads.length);
+        }
+        final int a = firstIndex;
+        final int b = lastIndex;
+        final Creature[] fc = c;
+        threads[i] = new Thread() {
+          @Override
+          public void run() {
+            for(int j = a; j < b; j++) {
+              for (int s = 0; s < 900; s++) {
+                workingCopy[j].simulate();
+              }
+              workingCopy[j].setAverages();
+              fc[j].d = workingCopy[j].getFitness();
+            }
+          }
+        };
+        threads[i].start();
+        previousLastIndex = lastIndex;
+      }
+      for(int i = 0; i < threads.length; i++) {
+        try {
+          threads[i].join();
+        } catch (InterruptedException ie) {
+          ie.printStackTrace(); // :(
+        }
+      }
+      double simulationTime = Math.round((System.nanoTime() - start) / 100000D) / 10;
+      frame.setTitle("evolutionSteer | simulationTime: " + simulationTime + " ms");
       setMenu(6);
     }
   }
@@ -1086,15 +1131,15 @@ void draw() {
           simulateCurrentCreature();
         }
       }
-      setAverages();
+      currentCreature.setAverages();
       if (speed < 30) {
         for (int s = 0; s < speed; s++) {
           moveCamera();
         }
       } else {
-        camX = averageX;
-        camY = averageY;
-        camZ = averageZ;
+        camX = currentCreature.averageX;
+        camY = currentCreature.averageY;
+        camZ = currentCreature.averageZ;
       }
       float camDist = (height/2.0) / tan(PI*30.0 / 180.0);
       simulationImage.pushMatrix();
@@ -1107,7 +1152,7 @@ void draw() {
       drawPosts(simulationImage);
       drawGround(simulationImage);
       currentCreature.drawCreature(simulationImage,false);
-      drawArrow(averageX,averageY,averageZ,simulationImage);
+      drawArrow(currentCreature.averageX,currentCreature.averageY,currentCreature.averageZ,simulationImage);
       simulationImage.popMatrix();
       simulationImage.endDraw();
       image(simulationImage,0,0,width/windowSizeMultiplier,
@@ -1128,7 +1173,7 @@ void draw() {
         textAlign(CENTER);
         textFont(font, 96);
         text("Creature's "+fitnessName+":", windowWidth/2, 300);
-        text(nf(getFitness(),0,2) + " "+fitnessUnit, windowWidth/2, 400);
+        text(nf(currentCreature.getFitness(),0,2) + " "+fitnessUnit, windowWidth/2, 400);
       } else {
         timer = 1020;
       }
@@ -1461,9 +1506,9 @@ void drawStats(float x, float y, float z, float size){
   if(energyDirection == -1){
     extraWord = "left";
   }
-  text("X: "+nf(averageX/5.0,0,2)+"", 0, 160);
-  text("Y: "+nf(-averageY/5.0,0,2)+"", 0, 192);
-  text("Z: "+nf(-averageZ/5.0,0,2)+"", 0, 224);
+  text("X: "+nf(currentCreature.averageX/5.0,0,2)+"", 0, 160);
+  text("Y: "+nf(-currentCreature.averageY/5.0,0,2)+"", 0, 192);
+  text("Z: "+nf(-currentCreature.averageZ/5.0,0,2)+"", 0, 224);
   //text("Energy "+extraWord+": "+nf(energy,0,2)+" yums", 0, 256);
   //text("A.N.Nausea: "+nf(averageNodeNausea,0,2)+" blehs", 0, 256);
   
@@ -1523,46 +1568,10 @@ void setGlobalVariables(Creature thisCreature) {
   camVA = -0.5;
   camHA = 0.0;
   simulationTimer = 0;
-  energy = baselineEnergy;
   totalNodeNausea = 0;
   averageNodeNausea = 0;
   cumulativeAngularVelocity = 0;
-  foodAngle = 0.0;
-  chomps = 0;
-  foodX = 0;
-  foodY = 0;
-  foodZ = 0;
-  setFoodLocation();
-}
-void setFoodLocation(){
-  setAverages();
-  foodAngle += currentCreature.foodPositions[chomps][0];
-  float sinA = sin(foodAngle);
-  float cosA = cos(foodAngle);
-  float furthestNodeForward = 0;
-  for(int i = 0; i < currentCreature.n.size(); i++){
-    Node ni = currentCreature.n.get(i);
-    float newX = (ni.x-averageX)*cosA-(ni.z-averageZ)*sinA;
-    if(newX >= furthestNodeForward){
-      furthestNodeForward = newX;
-    }
-  }
-  float d = MIN_FOOD_DISTANCE+(MAX_FOOD_DISTANCE-MIN_FOOD_DISTANCE)*currentCreature.foodPositions[chomps][2];
-  foodX = foodX+cos(foodAngle)*(furthestNodeForward+d);
-  foodZ = foodZ+sin(foodAngle)*(furthestNodeForward+d);
-  foodY = currentCreature.foodPositions[chomps][1];
-  startingFoodDistance = getCurrentFoodDistance();
-}
-float getCurrentFoodDistance(){
-  float closestDist = 9999;
-  for(int i = 0; i < currentCreature.n.size(); i++){
-    Node n = currentCreature.n.get(i);
-    float distFromFood = dist(n.x,n.y,n.z,foodX,foodY,foodZ)-0.4;
-    if(distFromFood < closestDist){
-      closestDist = distFromFood;
-    }
-  }
-  return closestDist;
+  currentCreature.calculateNextFoodLocation();
 }
 int[] getNewCreatureName(){
   float indexOfChoice = random(0,TOTAL_PLEDGED);
@@ -1593,20 +1602,6 @@ String rankify(int s){
     return s+"th";
   }
 }
-float getFitness(){
-  Boolean hasNodeOffGround = false;
-  for(int i = 0; i < currentCreature.n.size(); i++){
-    if(currentCreature.n.get(i).y <= -0.2001){
-      hasNodeOffGround = true;
-    }
-  }
-  if(hasNodeOffGround){
-    float withinChomp = max(1.0-getCurrentFoodDistance()/startingFoodDistance,0);
-    return chomps+withinChomp;//cumulativeAngularVelocity/(n.size()-2)/pow(averageNodeNausea,0.3);//   /(2*PI)/(n.size()-2); //dist(0,0,averageX,averageZ)*0.2; // Multiply by 0.2 because a meter is 5 units for some weird reason.
-  }else{
-    return 0;
-  }
-}
 void setFitness(int i){
-  c[i].d = getFitness();
+  c[i].d = currentCreature.getFitness();
 }
