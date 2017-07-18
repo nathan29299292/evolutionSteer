@@ -11,9 +11,9 @@ class Muscle {
     rigidity = trigidity;
     brainOutput = 1;
   }
-  void applyForce(int i, ArrayList<Node> n, Creature owner) {
+  void applyForce(int i, ArrayList<Node> n) {
     float target = previousTarget;
-    if(energyDirection == 1 || owner.energy >= 0.0001){
+    if(energyDirection == 1 || energy >= 0.0001){
       target = len*toMuscleUsable(brainOutput);
     }else{
       target = len;
@@ -25,14 +25,14 @@ class Muscle {
       float normX = (ni1.x-ni2.x)/distance;
       float normY = (ni1.y-ni2.y)/distance;
       float normZ = (ni1.z-ni2.z)/distance;
-      float force = min(max(1-(distance/target), -1.7), 1.7);
+      force = min(max(1-(distance/target), -1.7), 1.7);
       ni1.vx += normX*force*rigidity/ni1.m;
       ni1.vy += normY*force*rigidity/ni1.m;
       ni1.vz += normZ*force*rigidity/ni1.m;
       ni2.vx -= normX*force*rigidity/ni2.m;
       ni2.vy -= normY*force*rigidity/ni2.m;
       ni2.vz -= normZ*force*rigidity/ni2.m;
-      owner.energy = max(owner.energy+energyDirection*abs(previousTarget-target)*rigidity*energyUnit,0);
+      energy = max(energy+energyDirection*abs(previousTarget-target)*rigidity*energyUnit,0);
       previousTarget = target;
     }
   }
